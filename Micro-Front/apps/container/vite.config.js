@@ -1,4 +1,3 @@
-// container/vite.config.js
 import { defineConfig } from 'vite';
 import federation from '@originjs/vite-plugin-federation';
 
@@ -14,13 +13,16 @@ export default defineConfig({
     }),
   ],
   build: {
-    target: 'esnext',  
+    target: 'esnext',
     cssCodeSplit: false,
-     rollupOptions: {
+    rollupOptions: {
       output: {
-       assetFileNames: 'assets/index.css',
-    }
-  }
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name?.endsWith('.css')) return 'assets/index.css';
+          return 'assets/[name]-[hash][extname]';
+        },
+      },
+    },
   },
   server: {
     host: 'localhost',
@@ -28,4 +30,9 @@ export default defineConfig({
     strictPort: true,
     cors: true,
   },
-})
+  preview: {
+    host: 'localhost',
+    port: 3000,
+    strictPort: true,
+  },
+});

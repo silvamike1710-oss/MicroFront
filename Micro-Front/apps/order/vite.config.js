@@ -18,6 +18,11 @@ export default defineConfig({
     strictPort: true,
     cors: true,
   },
+  preview: {
+    host: 'localhost',
+    port: 3002,
+    strictPort: true,
+  },
   build: {
     target: 'esnext',
     minify: false,       

@@ -1,137 +1,160 @@
-Microfrontend App (Vite + Module Federation)
-Overview
+# 🍽️ Nom Nom — Microfrontend Food Ordering App
 
-This project is a microfrontend architecture using Vite and @originjs/vite-plugin-federation, composed of:
+A microfrontend application built with **Vite**, **Module Federation**, and **Tailwind CSS v4**. Three independently deployable apps work together to deliver a seamless food ordering experience.
 
-container → host application
-menu → remote module (UI)
-order → remote module (cart logic)
+---
 
-The goal was to improve performance, modularity, and loading strategy.
+## Architecture
 
-Initial State (Before Refactor)
-Architecture Issues
-Remote modules loaded inefficiently
-Incorrect module resolution (double-wrapped exports not handled)
-Duplicate dynamic imports
-Recursive init() call
-No optimization for loading or execution order
-Example (Before)
-const [{ renderMenu }, { createCart }] = await Promise.all([
-  import('menu/menu'),
-  import('order/order'),
-]);
+```
+Micro-Front/
+└── apps/
+    ├── container/   # Host app — composes menu and cart (port 3000)
+    ├── menu/        # Remote — renders food cards (port 3001)
+    └── order/       # Remote — manages the shopping cart (port 3002)
+```
 
-init(); // ❌ recursive call
+Each app is fully independent with its own `package.json`, `vite.config.js`, and Tailwind setup. The container loads `menu` and `order` at runtime via **Module Federation**.
 
-const [{ renderMenu }, { createCart }] = await Promise.all([
-  import('menu/menu'),
-  import('order/order'),
-]);
-Problems
-❌ Duplicate imports
-❌ Recursive execution
-❌ No error-safe module resolution
-❌ Incorrect assumption about export shape
-❌ Runtime crashes (createCart is not a function)
-Refactoring
-Key Changes
-1. Removed duplicate imports and recursion
-Ensured init() runs once
-Single import source of truth
-2. Fixed federation module resolution
+---
 
-Handled Vite federation's module wrapping:
+## Tech Stack
 
-const menuModule = await import('menu/menu');
-const orderModule = await import('order/order');
+| Tool | Purpose |
+|---|---|
+| [Vite](https://vitejs.dev/) | Build tool and dev server |
+| [@originjs/vite-plugin-federation](https://github.com/originjs/vite-plugin-federation) | Module Federation for microfrontends |
+| [Tailwind CSS v4](https://tailwindcss.com/) | Utility-first styling |
+| PostCSS + Autoprefixer | CSS processing |
 
-const renderMenu = menuModule.default.renderMenu;
-const createCart = orderModule.default.createCart;
-3. Improved initialization flow
-async function init() {
-  if (initialized) return;
-  initialized = true;
+---
 
-  try {
-    const menuModule = await import('menu/menu');
-    const orderModule = await import('order/order');
+## Getting Started
 
-    const renderMenu = menuModule.default.renderMenu;
-    const createCart = orderModule.default.createCart;
+### Prerequisites
+- Node.js 18+
+- npm 9+
 
-    const cart = createCart();
-    const menu = renderMenu(cart.add);
+### Install dependencies in each app
 
-    // UI composition...
-  } catch (err) {
-    console.error('IMPORT ERROR:', err);
-  }
+```bash
+cd apps/menu && npm install
+cd apps/order && npm install
+cd apps/container && npm install
+```
+
+### Run (always build before preview — Module Federation requires it)
+
+```bash
+# Terminal 1
+cd apps/menu && npm run build && npm run preview
+
+# Terminal 2
+cd apps/order && npm run build && npm run preview
+
+# Terminal 3 — container last, depends on menu and order being up
+cd apps/container && npm run build && npm run preview
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+> ⚠️ Always start `menu` and `order` before `container`. The container fetches their `remoteEntry.js` at runtime.
+
+---
+
+## Tailwind CSS v4 Setup
+
+This project uses **Tailwind v4**, which changed how content scanning works. The `content` array in `tailwind.config.js` is no longer used. Instead, source paths are declared directly in `styles.css` using `@source`:
+
+```css
+/* styles.css */
+@import "tailwindcss";
+
+@source "./menu.js";   /* or whichever files contain Tailwind classes */
+```
+
+The container also scans the remote apps' source files:
+
+```css
+/* container/src/styles.css */
+@import "tailwindcss";
+
+@source "../../menu/src/**/*.js";
+@source "../../order/src/**/*.js";
+```
+
+---
+
+## Module Federation Config
+
+### Container (host)
+```js
+federation({
+  name: 'container',
+  remotes: {
+    menu: 'http://localhost:3001/assets/remoteEntry.js',
+    order: 'http://localhost:3002/assets/remoteEntry.js',
+  },
+})
+```
+
+### Menu (remote)
+```js
+federation({
+  name: 'menu',
+  filename: 'remoteEntry.js',
+  exposes: { './menu': './src/menu.js' },
+})
+```
+
+### Order (remote)
+```js
+federation({
+  name: 'order',
+  filename: 'remoteEntry.js',
+  exposes: { './order': './src/order.js' },
+})
+```
+
+---
+
+## Accessibility
+
+This app is built with Lighthouse and WCAG AA compliance in mind:
+
+- Semantic HTML — `<main>`, `<header>`, `<section>`, `<article>`, `<aside>`, `<ul>/<li>`
+- `lang="en"` on `<html>` for screen reader language detection
+- `aria-label` on all interactive elements and landmarks
+- `aria-live="polite"` on the cart list so screen readers announce updates
+- Visible focus rings on all buttons (`focus:ring-2`)
+- Sufficient color contrast (amber on white meets AA ratio)
+- Descriptive `<meta name="description">` for SEO
+- `defer` on scripts to prevent layout blocking
+
+---
+
+## Common Issues
+
+**Styles not showing after a change?**
+You must rebuild the specific app that changed, then rebuild the container:
+```bash
+cd apps/menu && npm run build && npm run preview
+cd apps/container && npm run build && npm run preview
+```
+
+**CSS file is empty or missing classes?**
+Make sure `styles.css` uses the v4 syntax and `@source` points to the right files:
+```css
+@import "tailwindcss";
+@source "./yourfile.js";
+```
+
+**Port conflicts?**
+Each app's `vite.config.js` needs a `preview` block in addition to `server`:
+```js
+preview: {
+  host: 'localhost',
+  port: 3001, // match the expected port
+  strictPort: true,
 }
-After Refactor
-Improvements
-✅ Correct module resolution
-✅ Stable async loading
-✅ No redundant imports
-✅ Clean initialization lifecycle
-✅ Reduced runtime errors
-✅ Better separation of concerns
-Lighthouse Results
-Metric	Before	After
-Performance	80	98
-Accessibility	78	96
-Best Practices	100	100
-SEO	82	90
-What Improved Performance
-1. Efficient Code Splitting
-Microfrontends loaded only when needed
-2. Reduced Blocking Work
-Removed redundant imports and execution
-3. Cleaner Execution Path
-Eliminated recursive calls and duplicate logic
-4. Proper Async Handling
-Controlled dynamic imports
-5. Federation Optimization
-Correct handling of remote modules reduced runtime overhead
-Lessons Learned
-1. Vite Federation wraps modules
-
-Always inspect imports:
-
-console.log(module);
-2. Match expose/import paths exactly
-// expose
-'./order': './src/order.js'
-
-// import
-import('order/order')
-3. Avoid assumptions about exports
-
-Always verify:
-
-default
-named exports
-nested structure
-Future Improvements
-Standardize exports to avoid .default
-Add lazy loading boundaries per route
-Implement error boundaries for remotes
-Add caching strategy for remoteEntry files
-Use prefetch/preload for critical remotes
-Running the Project
-# install deps
-npm install
-
-# run remotes
-npm run dev --workspace=menu
-npm run dev --workspace=order
-
-# run container
-npm run dev --workspace=container
-Final Notes
-
-The main improvement came from:
-
-Correctly handling how federation delivers modules at runtime.
-
-This eliminated runtime errors and significantly improved performance metrics.
+```

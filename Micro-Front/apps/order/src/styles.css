@@ -1,3 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* order/src/styles.css */
+@import "tailwindcss";
+
+@source "./order.js";
